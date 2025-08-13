@@ -1,0 +1,17 @@
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Logs & temp
+*.log
+*.tmp
+
+# Secrets (never commit)
+*.env
+*.key
+*.pem
+secrets/

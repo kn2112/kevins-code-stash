@@ -1,0 +1,17 @@
+@base = https://your-bookstack.example.com
+@token_id = YOUR_ID
+@token_secret = YOUR_SECRET
+
+### List books
+GET {{base}}/api/books
+Authorization: Token {{token_id}}:{{token_secret}}
+
+### Create book
+POST {{base}}/api/books
+Authorization: Token {{token_id}}:{{token_secret}}
+Content-Type: application/json
+
+{
+  "name": "Playground",
+  "description": "Temp"
+}
