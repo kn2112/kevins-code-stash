@@ -1,0 +1,92 @@
+# Create bookstack skeleton in Powershell
+# Functions to create books, chapters, etc. check for duplicate names prior to creation
+
+
+
+$Base   = "ADDRESSHERE"
+$ID     = "IDHERE"
+$Secret = "SECRETHERE"
+$H      = @{Authorization="Token $ID`:$Secret"; "Content-Type"="application/json"; Accept="application/json"}
+
+# --- Helper: Get or create shelf ---
+function Get-OrCreateShelf {
+    param([string]$ShelfName,[string]$Description)
+    $searchTerm = [uri]::EscapeDataString($ShelfName)
+    $existing   = Invoke-RestMethod -Uri "$Base/api/shelves?search=$searchTerm" -Headers $H -Method GET
+    if (-not $existing.data -or $existing.total -eq 0) {
+        Invoke-RestMethod -Uri "$Base/api/shelves" -Headers $H -Method POST -Body (@{name=$ShelfName;description=$Description} | ConvertTo-Json)
+    } else {
+        $existing.data[0]
+    }
+}
+
+# --- Helper: Get or create book ---
+function Get-OrCreateBook {
+    param([string]$BookName,[string]$Description)
+    $searchTerm = [uri]::EscapeDataString($BookName)
+    $existing   = Invoke-RestMethod -Uri "$Base/api/books?search=$searchTerm" -Headers $H -Method GET
+    if (-not $existing.data -or $existing.total -eq 0) {
+        Invoke-RestMethod -Uri "$Base/api/books" -Headers $H -Method POST -Body (@{name=$BookName;description=$Description} | ConvertTo-Json)
+    } else {
+        $existing.data[0]
+    }
+}
+
+# --- Helper: Get or create chapter ---
+function Get-OrCreateChapter {
+    param([int]$BookId,[string]$ChapterName,[string]$Description)
+    $searchTerm = [uri]::EscapeDataString($ChapterName)
+    $existing   = Invoke-RestMethod -Uri "$Base/api/chapters?search=$searchTerm" -Headers $H -Method GET
+    $match      = $existing.data | Where-Object { $_.book_id -eq $BookId }
+    if (-not $match) {
+        Invoke-RestMethod -Uri "$Base/api/chapters" -Headers $H -Method POST -Body (@{book_id=$BookId;name=$ChapterName;description=$Description} | ConvertTo-Json)
+    } else {
+        $match[0]
+    }
+}
+
+# --- Helper: Get or create page ---
+function Get-OrCreatePage {
+    param([int]$BookId,[int]$ChapterId,[string]$PageName,[string]$Markdown)
+    $searchTerm = [uri]::EscapeDataString($PageName)
+    $existing   = Invoke-RestMethod -Uri "$Base/api/pages?search=$searchTerm" -Headers $H -Method GET
+    $match      = $existing.data | Where-Object { $_.chapter_id -eq $ChapterId }
+    if (-not $match) {
+        Invoke-RestMethod -Uri "$Base/api/pages" -Headers $H -Method POST -Body (@{
+            book_id    = $BookId
+            chapter_id = $ChapterId
+            name       = $PageName
+            markdown   = $Markdown
+        } | ConvertTo-Json)
+    } else {
+        $match[0]
+    }
+}
+
+# 1) Shelf
+$it = Get-OrCreateShelf "IT" "IT knowledge base"
+
+# 2) Books
+$infra = Get-OrCreateBook "Infrastructure" "Core systems: AD, Hyper-V, network, endpoints"
+$app   = Get-OrCreateBook "Applications" "Business apps & platforms"
+$ops   = Get-OrCreateBook "Operations & BC" "Operations & continuity"
+$gov   = Get-OrCreateBook "Governance & Vendors" "Policies, compliance & vendors"
+
+# 3) Attach books to shelf
+Invoke-RestMethod -Uri "$Base/api/shelves/$($it.id)" -Headers $H -Method PUT -Body (@{
+    name        = $it.name
+    description = $it.description
+    books       = @($infra.id, $app.id, $ops.id, $gov.id)
+} | ConvertTo-Json) | Out-Null
+
+# 4) Chapters under Infrastructure
+$adChapter    = Get-OrCreateChapter $infra.id "Active Directory" "Architecture, FSMO, sites/replication, DC lifecycle, health checks, backup/restore."
+$hypervChapter= Get-OrCreateChapter $infra.id "Hyper-V" "Host fabric, VM lifecycle, migration, backup/restore, capacity."
+$netsecChapter= Get-OrCreateChapter $infra.id "Network & Security" "Firewall, switching, wireless, remote access, diagrams."
+$endpointsChapter = Get-OrCreateChapter $infra.id "Endpoints" "Windows baselines, hardware models, provisioning, software catalog."
+
+# 5) Starter pages (examples)
+Get-OrCreatePage $infra.id $adChapter.id "Domain Controller Inventory" "## Domain Controllers`n- DC01`n- DC02"
+Get-OrCreatePage $infra.id $hypervChapter.id "Host Inventory" "## Hyper-V Hosts`n- HV01`n- HV02"
+
+Write-Host "Structure created/verified."
